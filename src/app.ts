@@ -22,6 +22,7 @@ import { MultiLogger } from './helpers/logger';
 import { SheetsService } from './helpers/sheets';
 import { Util } from './helpers/util';
 import { VertexHelper } from './helpers/vertex';
+import { SingleGenerator, PromptWorkspace } from './helpers/generators';
 
 /**
  * This is required to avoid treeshaking this file.
@@ -273,6 +274,28 @@ function getConfigSheetValue(field: { row: number; col: number }) {
     field.col
   );
 }
+
+const descriptionGenerator = new SingleGenerator(
+  VertexHelper.getInstance(vertexAiGcpProjectId, vertexAiLanguageModelId, {
+    temperature: Number(
+      getConfigSheetValue(
+        CONFIG.userSettings.description.modelParameters.temperature
+      )
+    ),
+    maxOutputTokens: Number(
+      getConfigSheetValue(
+        CONFIG.userSettings.description.modelParameters.maxOutputTokens
+      )
+    ),
+    topK: Number(
+      getConfigSheetValue(CONFIG.userSettings.description.modelParameters.topK)
+    ),
+    topP: Number(
+      getConfigSheetValue(CONFIG.userSettings.description.modelParameters.topP)
+    ),
+  }),
+  getConfigSheetValue(CONFIG.userSettings.description.fullPrompt)
+);
 
 /**
  * Use Vertex AI to optimize row.
@@ -563,43 +586,52 @@ function fetchDescriptionGenerationData(
     },
     data
   );
-  const dataContext = `Context: ${JSON.stringify(modifiedData)}\n\n`;
-  const prompt =
-    getConfigSheetValue(CONFIG.userSettings.description.fullPrompt) +
-    dataContext;
 
-  if (isErroneousPrompt(prompt)) {
-    throw new Error(
-      'Could not read the description prompt from the "Config" sheet. ' +
-        'Please refresh the sheet by adding a new row before the ' +
-        '"Description Prompt Settings" section then immediately deleting it.'
-    );
-  }
-  const res = Util.executeWithRetry(CONFIG.vertexAi.maxRetries, () =>
-    VertexHelper.getInstance(vertexAiGcpProjectId, vertexAiLanguageModelId, {
-      temperature: Number(
-        getConfigSheetValue(
-          CONFIG.userSettings.description.modelParameters.temperature
-        )
-      ),
-      maxOutputTokens: Number(
-        getConfigSheetValue(
-          CONFIG.userSettings.description.modelParameters.maxOutputTokens
-        )
-      ),
-      topK: Number(
-        getConfigSheetValue(
-          CONFIG.userSettings.description.modelParameters.topK
-        )
-      ),
-      topP: Number(
-        getConfigSheetValue(
-          CONFIG.userSettings.description.modelParameters.topP
-        )
-      ),
-    }).predict(prompt)
-  );
-  return res;
+  const descriptionWorkspace: PromptWorkspace = {
+    context: { data: modifiedData },
+    lastOutput: '',
+  };
+
+  const genDescription =
+    descriptionGenerator.generate(descriptionWorkspace).lastOutput;
+  return genDescription;
+  // const dataContext = `Context: ${JSON.stringify(modifiedData)}\n\n`;
+  // const prompt =
+  //   getConfigSheetValue(CONFIG.userSettings.description.fullPrompt) +
+  //   dataContext;
+
+  // if (isErroneousPrompt(prompt)) {
+  //   throw new Error(
+  //     'Could not read the description prompt from the "Config" sheet. ' +
+  //       'Please refresh the sheet by adding a new row before the ' +
+  //       '"Description Prompt Settings" section then immediately deleting it.'
+  //   );
+  // }
+  // const res = Util.executeWithRetry(CONFIG.vertexAi.maxRetries, () =>
+  //   VertexHelper.getInstance(vertexAiGcpProjectId, vertexAiLanguageModelId, {
+  //     temperature: Number(
+  //       getConfigSheetValue(
+  //         CONFIG.userSettings.description.modelParameters.temperature
+  //       )
+  //     ),
+  //     maxOutputTokens: Number(
+  //       getConfigSheetValue(
+  //         CONFIG.userSettings.description.modelParameters.maxOutputTokens
+  //       )
+  //     ),
+  //     topK: Number(
+  //       getConfigSheetValue(
+  //         CONFIG.userSettings.description.modelParameters.topK
+  //       )
+  //     ),
+  //     topP: Number(
+  //       getConfigSheetValue(
+  //         CONFIG.userSettings.description.modelParameters.topP
+  //       )
+  //     ),
+  //   }).predict(prompt)
+  // );
+  // return res;
 }
 
 /**
